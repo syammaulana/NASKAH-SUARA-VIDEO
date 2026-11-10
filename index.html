@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Naskah dan Suara dari Video</title>
+<style>
+:root{--ink:#12202b;--muted:#566774;--paper:#eef3f5;--card:#fff;--line:#c9d5dc;--accent:#0e7c7b;--on:#fff;--bad:#b3261e;color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root{--ink:#e6eef2;--muted:#9fb0bb;--paper:#0f171c;--card:#172228;--line:#2b3b45;--accent:#3cc4c0;--on:#04201f;--bad:#ff8a80}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:max(16px,env(safe-area-inset-top)) 16px max(28px,env(safe-area-inset-bottom))}
+main{max-width:560px;margin:0 auto}
+h1{font-size:1.6rem;line-height:1.2;margin:8px 0 4px}
+h2{font-size:1.15rem;margin:26px 0 0}
+.sub,.hint{color:var(--muted)}
+.sub{margin:0}
+.hint{margin:6px 0 0;font-size:.875rem}
+label{display:block;font-weight:600;margin:18px 0 6px}
+input,select,textarea,button{font:inherit;color:inherit}
+input[type=password],input[type=text],input[type=number],select,textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+input[type=file]{width:100%}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+textarea{min-height:110px;resize:vertical}
+video{display:block;width:100%;max-height:300px;margin-top:10px;border-radius:10px;background:#000}
+.row{display:flex;gap:12px}.row>div{flex:1;min-width:0}
+.chk{display:flex;align-items:center;gap:8px;margin-top:10px;font-weight:400}
+.chk input{width:20px;height:20px;accent-color:var(--accent)}
+a{color:var(--accent)}
+.btn{display:inline-block;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--card);font-weight:600;cursor:pointer;text-decoration:none;color:inherit}
+.main{flex:1;padding:15px;border:0;border-radius:12px;background:var(--accent);color:var(--on);font-weight:700;cursor:pointer}
+.acts{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+button:disabled{opacity:.6;cursor:progress}
+[hidden]{display:none!important}
+#bar{height:6px;margin-top:12px;border-radius:3px;background:var(--line);overflow:hidden}
+#bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
+#msg{min-height:1.5em;margin:10px 0 0}#msg.err{color:var(--bad)}
+details{margin-top:18px;border-top:1px solid var(--line);padding-top:10px}summary{cursor:pointer;font-weight:600}
+.seg,.take{margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+.seg label{margin-top:0}.seg input[type=number]{background:var(--paper)}.seg textarea{margin-top:10px;min-height:90px;background:var(--paper)}
+.est{align-self:end;padding-bottom:12px;font-size:.875rem;color:var(--muted)}.est.bad{color:var(--bad);font-weight:600}
+.take audio{width:100%;margin-top:8px}
+</style>
+</head>
+<body>
+<main>
+<h1>Naskah dan Suara dari Video</h1>
+<p class="sub">Unggah video, beri perintah, dapatkan naskah dan file WAV yang pas dengan durasi video.</p>
+
+<label for="key">API key Gemini</label>
+<input id="key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Tempel API key dari Google AI Studio">
+<label class="chk"><input id="keep" type="checkbox" checked> Ingat key di HP ini</label>
+
+<label for="vf">Video (klip pendek, tanpa suara pun boleh)</label>
+<input id="vf" type="file" accept="video/*">
+<video id="pv" controls playsinline hidden></video>
+<p class="hint" id="vinfo"></p>
+
+<label for="cmd">Perintah</label>
+<textarea id="cmd" data-p placeholder="Contoh: Buat voice over promosi produk ini untuk Shopee Video, gaya ceria, akhiri dengan ajakan klik keranjang kuning."></textarea>
+
+<div class="row">
+  <div><label for="model">Model suara</label>
+  <select id="model" data-p><option value="gemini-3.8-flash-lite-tts">Flash-Lite (hemat)</option><option value="gemini-3.8-flash-tts">Flash (lebih ekspresif)</option></select></div>
+  <div><label for="voice">Suara</label><select id="voice" data-p></select></div>
+</div>
+<label for="style">Gaya bicara (opsional)</label>
+<input id="style" data-p type="text" placeholder="contoh: ceria, cepat, seperti reviewer produk">
+
+<details>
+  <summary>Opsi lanjutan</summary>
+  <div class="row">
+    <div><label for="tm">Model naskah</label><select id="tm" data-p><option value="gemini-3.5-flash-lite">3.5 Flash-Lite (hemat)</option><option value="gemini-3.8-flash">3.8 Flash (lebih cermat)</option></select></div>
+    <div><label for="wps">Kata per detik</label><input id="wps" data-p type="number" step="0.1" min="1.5" max="4" value="2.6"></div>
+  </div>
+  <p class="hint">Kata per detik menentukan panjang naskah. Turunkan kalau suara terasa terburu-buru.</p>
+</details>
+
+<div class="acts"><button id="gen" type="button" class="main">Buat naskah dari video</button><button id="stop" type="button" class="btn" hidden>Batal</button></div>
+<div id="bar" aria-hidden="true"><i></i></div>
+<p id="msg" role="status" aria-live="polite"></p>
+<button id="copy" type="button" class="btn" hidden>Salin detail galat</button>
+
+<section id="ed" hidden>
+  <h2>Naskah per adegan</h2>
+  <p class="hint">Edit teksnya sesuai selera. Waktu mulai juga bisa diubah. Angka merah berarti teks kemungkinan terlalu panjang untuk jendelanya, jadi suara akan dipercepat atau meluber.</p>
+  <div id="segs"></div>
+  <div class="acts"><button id="tts" type="button" class="main">Buat suara WAV</button><button id="cp" type="button" class="btn">Salin naskah</button></div>
+</section>
+<div id="res"></div>
+</main>
+
+<script>
+const API='https://generativelanguage.googleapis.com/v1beta';
+const VOICES=[["Zephyr","Cerah"],["Puck","Ceria"],["Charon","Informatif"],["Kore","Tegas"],["Fenrir","Antusias"],["Leda","Muda"],["Orus","Tegas"],["Aoede","Santai"],["Callirrhoe","Santai"],["Autonoe","Cerah"],["Enceladus","Berbisik"],["Iapetus","Jernih"],["Umbriel","Santai"],["Algieba","Halus"],["Despina","Halus"],["Erinome","Jernih"],["Algenib","Serak"],["Rasalgethi","Informatif"],["Laomedeia","Ceria"],["Achernar","Lembut"],["Alnilam","Tegas"],["Schedar","Stabil"],["Gacrux","Dewasa"],["Pulcherrima","Lugas"],["Achird","Ramah"],["Zubenelgenubi","Kasual"],["Vindemiatrix","Lembut"],["Sadachbia","Hidup"],["Sadaltager","Berpengetahuan"],["Sulafat","Hangat"]];
+const $=id=>document.getElementById(id);
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
+const msg=(t,e)=>{$('msg').textContent=t;$('msg').className=e?'err':''};
+const setBar=p=>{$('bar').firstElementChild.style.width=Math.round(p*100)+'%'};
+let busy=false,ctl=null,D=0,segs=[],dbgT='',mode='int',resUrl='';
+
+$('voice').innerHTML=VOICES.map(([n,d])=>'<option value="'+n+'">'+n+' ('+d+')</option>').join('');
+const P=[...document.querySelectorAll('[data-p]')];
+try{const o=JSON.parse(store.get('nsv_p')||'{}');P.forEach(e=>{if(e.id in o)e.value=o[e.id]})}catch(e){}
+if(!$('voice').value)$('voice').value='Kore';
+const savePrefs=()=>{const o={};P.forEach(e=>{o[e.id]=e.value});store.set('nsv_p',JSON.stringify(o))};
+P.forEach(e=>e.addEventListener('change',savePrefs));
+$('key').value=store.get('gtts_key')||'';
+
+const pv=$('pv');
+$('vf').onchange=()=>{
+  const f=$('vf').files[0];if(!f)return;
+  if(pv.src)URL.revokeObjectURL(pv.src);
+  D=0;segs=[];$('ed').hidden=true;$('res').innerHTML='';
+  pv.hidden=false;pv.muted=false;pv.src=URL.createObjectURL(f);
+  $('vinfo').textContent='Membaca video…';
+  pv.onloadedmetadata=()=>{D=pv.duration;$('vinfo').textContent='Durasi '+D.toFixed(1)+' detik, '+pv.videoWidth+'x'+pv.videoHeight+', '+(f.size/1048576).toFixed(1)+' MB.'};
+  pv.onerror=()=>{$('vinfo').textContent='Browser tidak bisa membaca video ini. Coba video MP4 (H.264).'};
+};
+
+// Ambil cuplikan gambar (maks. 24, sisi terpanjang 512 px) supaya kecil dan cepat dikirim.
+async function frames(file){
+  const v=document.createElement('video');v.muted=true;v.playsInline=true;v.preload='auto';v.src=URL.createObjectURL(file);
+  await new Promise((r,j)=>{v.onloadedmetadata=r;v.onerror=()=>j(new Error('Video tidak bisa dibaca browser. Coba MP4 (H.264).'))});
+  const dur=v.duration,step=Math.max(1,Math.ceil(dur/24)),out=[],c=document.createElement('canvas'),k=Math.min(1,512/Math.max(v.videoWidth,v.videoHeight));
+  c.width=Math.round(v.videoWidth*k);c.height=Math.round(v.videoHeight*k);
+  const g=c.getContext('2d');
+  for(let t=0;t<dur;t+=step){
+    v.currentTime=Math.min(t+.05,dur-.05);
+    await Promise.race([new Promise(r=>{v.onseeked=r}),new Promise(r=>setTimeout(r,4000))]);
+    g.drawImage(v,0,0,c.width,c.height);
+    out.push({t,data:c.toDataURL('image/jpeg',.7).split(',')[1]});
+  }
+  URL.revokeObjectURL(v.src);
+  return out;
+}
+
+const lastAudio=(o,r={v:null})=>{
+  if(o&&typeof o==='object'){
+    if(o.type==='audio'&&typeof o.data==='string')r.v={data:o.data,mime:o.mime_type||o.mimeType||''};
+    else if(o.inlineData&&typeof o.inlineData.data==='string'&&/audio/.test(o.inlineData.mimeType||'audio'))r.v={data:o.inlineData.data,mime:o.inlineData.mimeType||''};
+    for(const k in o)lastAudio(o[k],r);
+  }
+  return r.v;
+};
+function decode(a){
+  const raw=atob(a.data),u=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++)u[i]=raw.charCodeAt(i);
+  let rate=+(/rate=(\d+)/.exec(a.mime)||[])[1]||24000,off=0,len=u.length;
+  if(raw.slice(0,4)==='RIFF'){
+    const v=new DataView(u.buffer);let p=12;
+    while(p+8<=u.length){
+      const id=raw.slice(p,p+4),sz=v.getUint32(p+4,true);
+      if(id==='fmt ')rate=v.getUint32(p+12,true);
+      if(id==='data'){off=p+8;len=Math.min(sz,u.length-off);break}
+      p+=8+sz+(sz&1);
+    }
+  }
+  len-=len&1;
+  const dv=new DataView(u.buffer,off,len),pcm=new Int16Array(len/2);
+  for(let i=0;i<pcm.length;i++)pcm[i]=dv.getInt16(i*2,true);
+  return {rate,pcm};
+}
+const trim=(p,r)=>{
+  let pk=0;for(let i=0;i<p.length;i++){const a=Math.abs(p[i]);if(a>pk)pk=a}
+  const th=Math.max(200,pk*.02),pad=Math.round(r*.08);let a=0,b=p.length-1;
+  while(a<b&&Math.abs(p[a])<th)a++;
+  while(b>a&&Math.abs(p[b])<th)b--;
+  return p.subarray(Math.max(0,a-pad),Math.min(p.length,b+pad+1));
+};
+const norm=o=>{
+  let pk=1;for(let i=0;i<o.length;i++){const a=Math.abs(o[i]);if(a>pk)pk=a}
+  const g=29200/pk;
+  if(g>1.02||g<.98)for(let i=0;i<o.length;i++)o[i]=Math.max(-32768,Math.min(32767,Math.round(o[i]*g)));
+};
+const wavBlob=(pcm,rate)=>{
+  const h=new DataView(new ArrayBuffer(44)),n=pcm.length*2,w=(o,s)=>{for(let i=0;i<s.length;i++)h.setUint8(o+i,s.charCodeAt(i))};
+  w(0,'RIFF');h.setUint32(4,36+n,true);w(8,'WAVEfmt ');h.setUint32(16,16,true);h.setUint16(20,1,true);h.setUint16(22,1,true);
+  h.setUint32(24,rate,true);h.setUint32(28,rate*2,true);h.setUint16(32,2,true);h.setUint16(34,16,true);w(36,'data');h.setUint32(40,n,true);
+  return new Blob([h,pcm],{type:'audio/wav'});
+};
+// Percepat suara tanpa mengubah nada (WSOLA sederhana). f>1 berarti lebih cepat.
+function stretch(x,f){
+  const W=1024,H=512,S=256,n=Math.floor(x.length/f),y=new Float32Array(n+W),win=new Float32Array(W);
+  for(let i=0;i<W;i++)win[i]=.5-.5*Math.cos(2*Math.PI*i/W);
+  let prev=0;
+  for(let o=0,k=0;o<n;o+=H,k++){
+    let c=Math.round(o*f);
+    if(k>0){
+      const ref=prev+H;let best=-1e30,bp=c;
+      for(let d=-S;d<=S;d+=2){
+        const p=c+d;if(p<0||p+W>x.length||ref+W>x.length)continue;
+        let s=0;for(let i=0;i<W;i+=4)s+=x[p+i]*x[ref+i];
+        if(s>best){best=s;bp=p}
+      }
+      c=bp;
+    }
+    if(c+W>x.length)break;
+    for(let i=0;i<W;i++)y[o+i]+=x[c+i]*win[i];
+    prev=c;
+  }
+  const out=new Int16Array(n);
+  for(let i=0;i<n;i++)out[i]=Math.max(-32768,Math.min(32767,Math.round(y[i])));
+  return out;
+}
+
+const wait=(ms,sig)=>new Promise((res,rej)=>{
+  const t=setTimeout(res,ms);
+  sig.addEventListener('abort',()=>{clearTimeout(t);rej(new DOMException('x','AbortError'))},{once:true});
+});
+const retryIn=d=>{try{const x=d.error.details.find(i=>i.retryDelay);return x?Math.min(60,Math.ceil(parseFloat(x.retryDelay))):0}catch(e){return 0}};
+const why=(s,m)=>{
+  if(s===400&&/api key/i.test(m))return 'API key tidak valid. Salin ulang dari Google AI Studio.';
+  if(s===401||s===403)return 'API key ditolak atau belum punya akses. Cek key dan project-nya di AI Studio. '+m;
+  if(s===404)return 'Model tidak ditemukan. Coba ganti model di pilihan atau Opsi lanjutan. '+m;
+  if(s===429)return 'Kuota gratis habis atau terlalu sering. Kuota harian reset tengah malam waktu Pasifik; cek sisanya di aistudio.google.com/rate-limit.';
+  if(s>=500)return 'Server Google sedang bermasalah. Coba lagi sebentar lagi.';
+  return m||('Gagal dengan kode '+s+'.');
+};
+async function post(url,body,sig,key){
+  const res=await fetch(url,{method:'POST',headers:{'x-goog-api-key':key,'Content-Type':'application/json'},body:JSON.stringify(body),signal:sig});
+  const d=await res.json().catch(()=>({}));
+  const m=(d.error&&d.error.message)||'';
+  if(!res.ok){dbgT='Jalur: '+url.replace(API,'')+'\nStatus: '+res.status+'\nPesan: '+m+'\n'+JSON.stringify(d).slice(0,700);throw {status:res.status,m,d}}
+  return d;
+}
+async function retry(fn,sig,lab){
+  for(let n=0;;n++){
+    try{return await fn()}
+    catch(e){
+      if(e.name==='AbortError')throw e;
+      const net=e instanceof TypeError,perDay=/per ?day|daily/i.test(JSON.stringify(e.d||{}));
+      if(!(e.status===429||e.status>=500||net)||perDay||n>=(net?1:3))throw e;
+      const s=retryIn(e.d)||Math.min(40,4*2**n);
+      for(let i=s;i>0;i--){msg(lab+': menunggu '+i+' dtk lalu coba lagi ('+(n+1)+'/3)…');await wait(1000,sig)}
+    }
+  }
+}
+
+async function makeScript(fr,o,sig){
+  const words=Math.round(D*o.wps);
+  const parts=[{text:'Kamu penulis naskah voice-over untuk video pendek berbahasa Indonesia. Video berdurasi '+D.toFixed(1)+' detik, tanpa wajah. Di bawah ini cuplikan gambar berurutan, tiap gambar diberi label waktunya.\n\nPerintah pengguna: '+o.cmd+'\n\nTulis naskah yang cocok dengan apa yang terlihat di tiap bagian video. Bagi menjadi 3 sampai 8 segmen berurutan yang menutupi seluruh durasi. Total naskah sekitar '+words+' kata supaya muat dalam durasi video. Setiap segmen berisi 1 sampai 2 kalimat bahasa lisan yang natural, tanpa emoji dan tanpa hashtag. Jangan mengarang harga, klaim, atau fakta yang tidak terlihat di gambar dan tidak disebut pengguna. Balas hanya JSON berbentuk {"segments":[{"start":0,"text":"..."}]}. start adalah detik mulai segmen (angka), urut menaik, segmen pertama start 0.'}];
+  fr.forEach(f=>{parts.push({text:'Gambar pada detik '+f.t.toFixed(1)+':'});parts.push({inline_data:{mime_type:'image/jpeg',data:f.data}})});
+  const d=await retry(()=>post(API+'/models/'+o.tm+':generateContent',{contents:[{parts}],generationConfig:{responseMimeType:'application/json'}},sig,o.key),sig,'Naskah');
+  const c=(d.candidates||[])[0]||{},txt=((c.content&&c.content.parts)||[]).map(p=>p.text||'').join('');
+  let j=null;try{j=JSON.parse(txt.replace(/^\s*```(?:json)?|```\s*$/g,'').trim())}catch(e){}
+  const arr=j&&(Array.isArray(j)?j:j.segments);
+  if(!Array.isArray(arr)||!arr.length){dbgT='Respons naskah tidak terbaca:\n'+txt.slice(0,700);throw {status:0,m:'Naskah dari Gemini tidak terbaca sebagai JSON. Coba tekan lagi.'}}
+  segs=arr.map(s=>({start:Math.max(0,Math.min(D-.5,+s.start||0)),text:String(s.text||'').trim(),aud:null})).filter(s=>s.text).sort((a,b)=>a.start-b.start);
+  if(!segs.length)throw {status:0,m:'Naskah kosong. Coba tekan lagi.'};
+  segs[0].start=0;
+  for(let i=1;i<segs.length;i++)if(segs[i].start<=segs[i-1].start)segs[i].start=Math.min(D-.3,segs[i-1].start+.5);
+}
+
+async function tts(text,o,sig){
+  const run=async()=>{
+    let url,body;
+    if(mode==='int'){
+      const part={type:'text',text};if(o.style)part.annotations=[{type:'speech_metadata',style:o.style}];
+      url=API+'/interactions';
+      body={model:o.model,input:[{type:'user_input',content:[part]}],response_format:{type:'audio'},generation_config:{speech_config:[{voice:o.voice}]}};
+    }else{
+      const part={text};if(o.style)part.speech_metadata={style:o.style};
+      url=API+'/models/'+o.model+':generateContent';
+      body={contents:[{parts:[part]}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:o.voice}}}}};
+    }
+    const a=lastAudio(await post(url,body,sig,o.key));
+    if(!a)throw {status:0,m:'Respons Google tidak berisi audio.'};
+    return decode(a);
+  };
+  try{return await retry(run,sig,'Suara')}
+  catch(e){
+    if(mode==='int'&&(e.status===404||(e.status===400&&!/api key/i.test(e.m)))){
+      mode='gen';
+      try{return await retry(run,sig,'Suara')}catch(e2){mode='int';throw e}
+    }
+    throw e;
+  }
+}
+
+function est(){
+  const wps=+$('wps').value||2.6;
+  segs.forEach((s,i)=>{
+    const end=i+1<segs.length?segs[i+1].start:D,win=Math.max(.1,end-s.start),n=s.text.trim().split(/\s+/).filter(Boolean).length,need=n/wps,el=$('e'+i);
+    if(!el)return;
+    el.textContent='Perkiraan '+need.toFixed(1)+' dtk dari jendela '+win.toFixed(1)+' dtk';
+    el.className='est'+(need>win*1.2?' bad':'');
+  });
+}
+function render(){
+  $('segs').innerHTML=segs.map((s,i)=>'<div class="seg"><div class="row"><div><label>Mulai (dtk)</label><input type="number" step="0.1" min="0" data-t="'+i+'"></div><div class="est" id="e'+i+'"></div></div><textarea data-x="'+i+'"></textarea></div>').join('');
+  segs.forEach((s,i)=>{document.querySelector('[data-t="'+i+'"]').value=s.start;document.querySelector('[data-x="'+i+'"]').value=s.text});
+  est();
+}
+$('segs').addEventListener('input',e=>{
+  const d=e.target.dataset;
+  if(d.x!==undefined){segs[d.x].text=e.target.value;segs[d.x].aud=null}
+  if(d.t!==undefined)segs[d.t].start=Math.max(0,+e.target.value||0);
+  est();
+});
+$('wps').addEventListener('change',est);
+
+function ui(){
+  $('gen').disabled=busy;$('tts').disabled=busy;$('stop').hidden=!busy;
+  if(busy)$('copy').hidden=true;
+}
+function fail(e){
+  if(e.name==='AbortError')return msg('Dibatalkan.',1);
+  if(e instanceof TypeError){dbgT='Galat jaringan: '+e.message;msg('Tidak bisa terhubung ke Google. Cek internet. Kalau file ini dibuka dari penyimpanan HP dan tetap gagal, taruh di GitHub Pages lalu buka dari sana.',1)}
+  else if(e.status===undefined)msg(e.message||String(e),1);
+  else msg(why(e.status,e.m),1);
+  $('copy').hidden=false;
+}
+const keyOk=()=>{
+  const key=$('key').value.trim();
+  if(!key){msg('Tempel API key dulu.',1);return ''}
+  if($('keep').checked)store.set('gtts_key',key);else store.del('gtts_key');
+  return key;
+};
+
+$('gen').onclick=async()=>{
+  if(busy)return;
+  const key=keyOk(),f=$('vf').files[0],cmd=$('cmd').value.trim();
+  if(!key)return;
+  if(!f||!D)return msg('Pilih video dulu.',1);
+  if(!cmd)return msg('Tulis perintahnya dulu, misalnya tujuan dan gaya videonya.',1);
+  savePrefs();busy=true;ui();ctl=new AbortController();setBar(.1);
+  try{
+    msg('Mengambil cuplikan gambar dari video…');
+    const fr=await frames(f);setBar(.4);
+    msg('Gemini menonton '+fr.length+' cuplikan dan menulis naskah…');
+    await makeScript(fr,{key,cmd,tm:$('tm').value,wps:+$('wps').value||2.6},ctl.signal);
+    render();$('ed').hidden=false;setBar(1);
+    msg('Naskah siap. Cek dan edit, lalu tekan Buat suara WAV.');
+  }catch(e){fail(e);setBar(0)}
+  finally{busy=false;ui()}
+};
+
+$('tts').onclick=async()=>{
+  if(busy||!segs.length)return;
+  const key=keyOk();if(!key)return;
+  const o={key,model:$('model').value,voice:$('voice').value,style:$('style').value.trim()};
+  savePrefs();busy=true;ui();ctl=new AbortController();
+  let wl=null;try{wl=await navigator.wakeLock.request('screen')}catch(e){}
+  try{
+    for(let i=0;i<segs.length;i++){
+      const s=segs[i],k=[o.model,o.voice,o.style,s.text].join('|');
+      if(!s.text.trim())throw {status:0,m:'Ada adegan dengan teks kosong. Isi atau hapus teksnya.'};
+      setBar(i/segs.length);
+      if(s.aud&&s.k===k)continue;
+      msg('Suara adegan '+(i+1)+' dari '+segs.length+'…');
+      s.aud=await tts(s.text,o,ctl.signal);s.k=k;
+    }
+    setBar(1);showRes(assemble(),o);
+  }catch(e){fail(e);setBar(0)}
+  finally{if(wl)wl.release().catch(()=>{});busy=false;ui()}
+};
+
+// Tempatkan suara tiap adegan di waktu mulainya; percepat bila terlalu panjang untuk jendelanya.
+function assemble(){
+  const rate=segs[0].aud.rate,vs=Math.round(D*rate),pl=[];let cur=0;
+  segs.forEach((s,i)=>{
+    let p=trim(s.aud.pcm,rate);
+    const st=Math.max(Math.round(s.start*rate),cur),nx=i+1<segs.length?Math.round(segs[i+1].start*rate):vs,win=nx-st;
+    if(p.length>win&&win>rate*.5)p=stretch(p,Math.min(1.35,p.length/win));
+    pl.push([st,p]);cur=st+p.length;
+  });
+  const out=new Int16Array(Math.max(vs,cur));
+  pl.forEach(([st,p])=>out.set(p,st));
+  norm(out);
+  return {out,rate,over:Math.max(0,(cur-vs)/rate)};
+}
+function showRes(r,o){
+  if(resUrl)URL.revokeObjectURL(resUrl);
+  const blob=wavBlob(r.out,r.rate),name='suara-video-'+Date.now().toString(36)+'.wav';
+  resUrl=URL.createObjectURL(blob);
+  $('res').innerHTML='<h2>Hasil</h2><div class="take"><b id="rt"></b><audio id="au" controls></audio><div class="acts" id="ra"></div></div>';
+  $('rt').textContent='Suara '+o.voice+', '+(r.out.length/r.rate).toFixed(1)+' dtk (video '+D.toFixed(1)+' dtk), '+(blob.size/1048576).toFixed(1)+' MB';
+  $('au').src=resUrl;
+  const dl=document.createElement('a');dl.className='btn';dl.href=resUrl;dl.download=name;dl.textContent='Unduh WAV';
+  const pj=document.createElement('button');pj.type='button';pj.className='btn';pj.textContent='Putar bersama video';
+  pj.onclick=()=>{pv.muted=true;pv.currentTime=0;$('au').currentTime=0;pv.play();$('au').play()};
+  $('ra').append(dl,pj);
+  const file=new File([blob],name,{type:'audio/wav'});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+    const sh=document.createElement('button');sh.type='button';sh.className='btn';sh.textContent='Bagikan';
+    sh.onclick=()=>navigator.share({files:[file],title:name}).catch(()=>{});
+    $('ra').append(sh);
+  }
+  msg(r.over>.2?'Suara melebihi video sekitar '+r.over.toFixed(1)+' detik. Pendekkan teks pada adegan yang berangka merah, lalu buat ulang (adegan yang tidak diubah tidak dibuat ulang).':'Selesai. Tekan Putar bersama video untuk memeriksa kecocokannya.',r.over>.2);
+  $('res').scrollIntoView({behavior:'smooth'});
+}
+
+$('stop').onclick=()=>{if(ctl)ctl.abort()};
+$('cp').onclick=()=>{
+  const t=segs.map(s=>s.text.trim()).join('\n');
+  (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>msg('Naskah disalin.'),()=>msg('Salin manual dari kolom di atas.',1));
+};
+$('copy').onclick=()=>{(navigator.clipboard?navigator.clipboard.writeText(dbgT):Promise.reject()).then(()=>msg('Detail galat disalin. Tempel ke chat Claude.'),()=>msg(dbgT,1))};
+</script>
+</body>
+</html>
